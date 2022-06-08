@@ -129,39 +129,47 @@ fn main() -> ! {
     // or
     let mut serial = dp
         .USART1
-        .serial((tx_pin, rx_pin), 9600.bps(), &clocks)
+        .serial((tx_pin, rx_pin), 115200.bps(), &clocks)
         .unwrap();
 
     //let mut delay = dp.TIM1.delay_ms(&clocks);
 
-    //let mut value: u8 = 0;
     let mut buf = [0u8; 64];
+    let mut read_count: usize = 0;
 
     loop {
-        //info!("Send {:03}", value);
-        //writeln!(serial, "value: {:03}\r", value).unwrap();
-        //value = value.wrapping_add(1);
-
-        let mut read_count: usize = 0;
-        while serial.is_rx_not_empty() && read_count < buf.len() {
-            info!(".");
-            buf[read_count] = serial.read().unwrap_or_default();
+        if let Ok(chr) = serial.read() {
+            buf[read_count] = chr;
 
             read_count += 1;
-        }
-        if read_count > 0 {
-            info!("Read {} bytes", read_count);
-            for chr in &buf[..read_count] {
-                let mut chr = *chr;
-                if chr == b'\r' {
-                    serial.write_str("\r\n").unwrap();
-                    //serial.write(b'\n').unwrap();
-                } else {
-                    serial.write(chr).unwrap();
-                }
+
+            if read_count > 0 {
+                info!("Read {} bytes", read_count);
             }
         }
 
-        //delay.delay(2.secs());
+        if read_count > 0
+            && (buf[read_count - 1] == b'\n' || buf[read_count - 1] == b'\r')
+        {
+            // newline - process instruction
+            info!("Got instruction: {}", buf[..read_count - 1]);
+            if &buf[0..2] == b"ls" {
+                serial.write_str("root@localhost # ls\r\n").unwrap();
+                serial
+                    .write_str(
+                        "bin etc lib root sbin tmp boot dev home proc usr\r\n",
+                    )
+                    .unwrap();
+            } else {
+                serial.write_str("GAME\r\n").unwrap();
+            }
+            read_count = 0;
+        }
+
+        if read_count >= buf.len() - 1 {
+            // too much! clear buffer and reset
+            warn!("Buffer size reached, resetting...");
+            read_count = 0;
+        }
     }
 }
