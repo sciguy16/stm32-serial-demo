@@ -18,6 +18,7 @@ use crate::hal::{
 };
 
 use core::cell::RefCell;
+use core::fmt::Write;
 use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 
@@ -37,7 +38,8 @@ static G_LED: Mutex<RefCell<Option<LedPin>>> = Mutex::new(RefCell::new(None));
 static G_LED2: Mutex<RefCell<Option<LedPin2>>> = Mutex::new(RefCell::new(None));
 
 // Make timer interrupt registers globally available
-static G_TIM: Mutex<RefCell<Option<CounterUs<TIM2>>>> = Mutex::new(RefCell::new(None));
+static G_TIM: Mutex<RefCell<Option<CounterUs<TIM2>>>> =
+    Mutex::new(RefCell::new(None));
 
 // Define an interupt handler, i.e. function to call when interrupt occurs.
 // This specific interrupt will "trip" when the timer TIM2 times out
@@ -79,8 +81,10 @@ fn main() -> ! {
     let rcc = dp.RCC.constrain();
     let clocks = rcc.cfgr.sysclk(16.MHz()).pclk1(8.MHz()).freeze();
 
-    // Configure PA5 pin to blink LED
+    let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
+
+    // Configure PA5 pin to blink LED
     let mut led = gpiob.pb12.into_push_pull_output();
     let _ = led.set_high(); // Turn off
     let mut led2 = gpiob.pb13.into_push_pull_output();
@@ -100,16 +104,31 @@ fn main() -> ! {
     timer.listen(Event::Update);
 
     // Move the timer into our global storage
-    cortex_m::interrupt::free(|cs| *G_TIM.borrow(cs).borrow_mut() = Some(timer));
+    cortex_m::interrupt::free(|cs| {
+        *G_TIM.borrow(cs).borrow_mut() = Some(timer)
+    });
 
     //enable TIM2 interrupt
     unsafe {
         cortex_m::peripheral::NVIC::unmask(Interrupt::TIM2);
     }
 
-    #[allow(clippy::empty_loop)]
+    // define RX/TX pins
+
+    let tx_pin = gpioa.pa9.into_alternate();
+
+    // configure serial
+    // let mut tx = Serial::tx(dp.USART1, tx_pin, 9600.bps(), &clocks).unwrap();
+    // or
+    let mut tx = dp.USART1.tx(tx_pin, 9600.bps(), &clocks).unwrap();
+
+    let mut delay = dp.TIM1.delay_ms(&clocks);
+
+    let mut value: u8 = 0;
+
     loop {
-        // Uncomment if you want to make controller sleep
-        cortex_m::asm::wfi();
+        writeln!(tx, "value: {:02}\r", value).unwrap();
+        value = value.wrapping_add(1);
+        delay.delay(2.secs());
     }
 }
