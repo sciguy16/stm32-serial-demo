@@ -6,6 +6,10 @@
 #![no_main]
 #![no_std]
 
+#[macro_use]
+extern crate defmt; // logging macros
+
+use defmt_rtt as _;
 use panic_halt as _;
 
 use stm32f4xx_hal as hal;
@@ -76,6 +80,8 @@ fn TIM2() {
 
 #[entry]
 fn main() -> ! {
+    info!("Start boot");
+
     let dp = Peripherals::take().unwrap();
 
     let rcc = dp.RCC.constrain();
@@ -127,7 +133,8 @@ fn main() -> ! {
     let mut value: u8 = 0;
 
     loop {
-        writeln!(tx, "value: {:02}\r", value).unwrap();
+        info!("Send {:03}", value);
+        writeln!(tx, "value: {:03}\r", value).unwrap();
         value = value.wrapping_add(1);
         delay.delay(2.secs());
     }
