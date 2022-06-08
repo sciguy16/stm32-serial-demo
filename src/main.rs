@@ -122,20 +122,46 @@ fn main() -> ! {
     // define RX/TX pins
 
     let tx_pin = gpioa.pa9.into_alternate();
+    let rx_pin = gpioa.pa10.into_alternate();
 
     // configure serial
     // let mut tx = Serial::tx(dp.USART1, tx_pin, 9600.bps(), &clocks).unwrap();
     // or
-    let mut tx = dp.USART1.tx(tx_pin, 9600.bps(), &clocks).unwrap();
+    let mut serial = dp
+        .USART1
+        .serial((tx_pin, rx_pin), 9600.bps(), &clocks)
+        .unwrap();
 
-    let mut delay = dp.TIM1.delay_ms(&clocks);
+    //let mut delay = dp.TIM1.delay_ms(&clocks);
 
-    let mut value: u8 = 0;
+    //let mut value: u8 = 0;
+    let mut buf = [0u8; 64];
 
     loop {
-        info!("Send {:03}", value);
-        writeln!(tx, "value: {:03}\r", value).unwrap();
-        value = value.wrapping_add(1);
-        delay.delay(2.secs());
+        //info!("Send {:03}", value);
+        //writeln!(serial, "value: {:03}\r", value).unwrap();
+        //value = value.wrapping_add(1);
+
+        let mut read_count: usize = 0;
+        while serial.is_rx_not_empty() && read_count < buf.len() {
+            info!(".");
+            buf[read_count] = serial.read().unwrap_or_default();
+
+            read_count += 1;
+        }
+        if read_count > 0 {
+            info!("Read {} bytes", read_count);
+            for chr in &buf[..read_count] {
+                let mut chr = *chr;
+                if chr == b'\r' {
+                    serial.write_str("\r\n").unwrap();
+                    //serial.write(b'\n').unwrap();
+                } else {
+                    serial.write(chr).unwrap();
+                }
+            }
+        }
+
+        //delay.delay(2.secs());
     }
 }
